@@ -22,7 +22,7 @@ Open your PowerShell in the project root directory (Web Application Security Lab
 python -m venv env
 ```
 
-### 2. Create the Virtual Environment
+### 2. Activate the Virtual Environment
 Activate the environment using the appropriate command in case you wann run some python script
 
 For windows:
