@@ -10,8 +10,7 @@ This lab will use two locally running versions of the VulnMart application:
 | Secure application | `http://127.0.0.1:5001` | Verify that the corresponding security control rejects or prevents the insecure behavior. |
 
 
-The vulnerable code base is given to you and you can copy it for the secure application build up so that you can run both applications side by side but into a differnet port number `5001`. You just have to make the changes only inside the app.py file in the given `TO-DO` section. Your goal is to test the API checkpoints below and record the observed result for both versions. Keep both code bases in the same folder level and use distinct SQLIte databse but with same name in both folder (it should be automatically 
-done for you if you don't manually change anything). If problem occures due to the same localhost server, try to run the to do implementation one at a time for secure and vulnerable codebase.
+The vulnerable code base is given to you and you can copy it for the secure application build-up so that you can run both applications side by side but into a different port number `5001`. You just have to make the changes only inside the app.py file in the given `TO-DO` section. Your goal is to test the API checkpoints below and record the observed result for both versions. Keep both code bases in the same directory level, and use distinct SQLite database but with same name in both folders (this should be done automatically if you do not manually change anything). If a problem occurs when both localhost servers are running, try to run the TO-DO implementation one at a time for secure and vulnerable codebase.
 
 ## Deliverables:
 
@@ -28,16 +27,16 @@ For each checkpoint:
 
 1. Run the test against the vulnerable application.
 2. Run the corresponding test against the secure application.
-3. Complete the final comparison table (<strong>With captured screen shots</strong>).
+3. Complete the final comparison table (<strong>With captured screenshots</strong>).
 4. Answer the questions and report it along with the completed table.
 
 Some controls are configuration/design controls rather than a single request-response vulnerability. For those checkpoints, inspect the relevant behavior and document the evidence requested.
 
 ---
 
-# Common PowerShell Setup
+# Common Cross-Platform Setup
 
-The following commands make it easier to run authenticated tests.
+The following commands make it easier to run authenticated tests. Ubuntu examples use `curl`; Windows examples use PowerShell cmdlets or `curl.exe`.
 
 ## Login as Alice
 
@@ -51,6 +50,12 @@ $login = Invoke-RestMethod `
 $token = $login.token
 ```
 
+### Ubuntu / Bash
+
+```bash
+token=$(curl -s -X POST "http://127.0.0.1:5000/api/login" -H "Content-Type: application/json" -d '{"username":"alice","password":"alicepw"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+```
+
 For the secure application, change port `5000` to `5001`.
 
 ## Reusable Authorization Header
@@ -59,6 +64,12 @@ For the secure application, change port `5000` to `5001`.
 $headers = @{
     Authorization = "Bearer $token"
 }
+```
+
+### Ubuntu / Bash
+
+```bash
+headers=(-H "Authorization: Bearer $token")
 ```
 
 ---
@@ -85,7 +96,14 @@ For the secure application, set a known lab secret before starting the applicati
 
 ```powershell
 $env:VULNMART_JWT_SECRET = "lab-demo-secret-change-this-in-production"
-python app.py
+python3 app.py
+```
+
+### Ubuntu / Bash
+
+```bash
+export VULNMART_JWT_SECRET="lab-demo-secret-change-this-in-production"
+python3 app.py
 ```
 
 Then restart the application without setting the environment variable and verify that the application still runs.
@@ -123,6 +141,12 @@ curl.exe -i `
   "http://127.0.0.1:5000/api/health"
 ```
 
+### Ubuntu / Bash
+
+```bash
+curl -i -H "Origin: http://evil.example" "http://127.0.0.1:5000/api/health"
+```
+
 Run the equivalent secure test on secure website:
 
 ```powershell
@@ -131,12 +155,24 @@ curl.exe -i `
   "http://127.0.0.1:5001/api/health"
 ```
 
+### Ubuntu / Bash
+
+```bash
+curl -i -H "Origin: http://evil.example" "http://127.0.0.1:5001/api/health"
+```
+
 Then test an allowed origin for the secure application, based on the configured CORS allowlist:
 
 ```powershell
 curl.exe -i `
   -H "Origin: http://127.0.0.1:5001" `
   "http://127.0.0.1:5001/api/health"
+```
+
+### Ubuntu / Bash
+
+```bash
+curl -i -H "Origin: http://127.0.0.1:5001" "http://127.0.0.1:5001/api/health"
 ```
 
 ## What to record
@@ -173,7 +209,12 @@ $login = Invoke-RestMethod `
   -ContentType "application/json"
 
 $token = $login.token
-$headers = @{ Authorization = "Bearer $token" }
+```
+
+### Ubuntu / Bash
+
+```bash
+token=$(curl -s -X POST "http://127.0.0.1:5000/api/login" -H "Content-Type: application/json" -d '{"username":"alice","password":"alicepw"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
 ```
 
 ## Step 2: Verify the token works immediately
@@ -185,6 +226,12 @@ Invoke-RestMethod `
   -Headers $headers
 ```
 
+### Ubuntu / Bash
+
+```bash
+curl -i "http://127.0.0.1:5000/api/users/1" "${headers[@]}"
+```
+
 ## Step 3: Wait for expiration
 
 The secure application defines a token lifetime. Wait until the configured lifetime has passed, then run the same request again.
@@ -194,6 +241,12 @@ Invoke-RestMethod `
   -Uri "http://127.0.0.1:5000/api/users/1" `
   -Method GET `
   -Headers $headers
+```
+
+### Ubuntu / Bash
+
+```bash
+curl -i "http://127.0.0.1:5000/api/users/1" "${headers[@]}"
 ```
 
 For the vulnerable application, repeat the same experiment using port `5000`.
@@ -219,9 +272,21 @@ Repeated requests, especially authentication attempts, must be throttled.
 
 ## PowerShell test
 
-Run the given rate_limit_chk.py and capture the `RATE LIMIT TEST RESULTS`
+Run the given `rate_limit_chk.py` and capture the `RATE LIMIT TEST RESULTS`.
+
+```powershell
+python3 rate_limit_chk.py
+```
 
 Repeat against the secure application using port `5001`.
+
+## Ubuntu / Bash test
+
+```bash
+python3 rate_limit_chk.py
+```
+
+Repeat against the secure application using port `5001`. If the script has a configurable target URL/port, set it to `http://127.0.0.1:5001` before rerunning. Do not assume a command-line port option unless it is implemented by the supplied script.
 
 ## Expected comparison
 
@@ -264,6 +329,12 @@ Invoke-RestMethod `
   -ContentType "application/json"
 ```
 
+### Ubuntu / Bash
+
+```bash
+curl -i -X POST "http://127.0.0.1:5000/api/register" -H "Content-Type: application/json" -d '{"username":"mallory","password":"mallorypw","email":"mallory@example.com","balance":0,"is_admin":0}'
+```
+
 Repeat using port `5001`.
 
 ## Malicious mass-assignment request
@@ -282,6 +353,12 @@ Invoke-RestMethod `
   -Method POST `
   -Body $body `
   -ContentType "application/json"
+```
+
+### Ubuntu / Bash
+
+```bash
+curl -i -X POST "http://127.0.0.1:5000/api/register" -H "Content-Type: application/json" -d '{"username":"mallory1","password":"mallory1pw","email":"mallory1@example.com","balance":999999,"is_admin":1}'
 ```
 
 Repeat using port `5001`.
@@ -318,6 +395,12 @@ Invoke-WebRequest `
   -ContentType "application/json"
 ```
 
+### Ubuntu / Bash
+
+```bash
+curl -i -X POST "http://127.0.0.1:5000/api/register" -H "Content-Type: application/json" -d '{"username":"","password":"short","email":""}'
+```
+
 Record the secure application's validation response. 
 
 ---
@@ -338,7 +421,12 @@ $login = Invoke-RestMethod `
   -ContentType "application/json"
 
 $token = $login.token
-$headers = @{ Authorization = "Bearer $token" }
+```
+
+### Ubuntu / Bash
+
+```bash
+token=$(curl -s -X POST "http://127.0.0.1:5000/api/login" -H "Content-Type: application/json" -d '{"username":"alice","password":"alicepw"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
 ```
 
 ## Alice requests her own profile
@@ -350,6 +438,12 @@ Invoke-RestMethod `
   -Headers $headers
 ```
 
+### Ubuntu / Bash
+
+```bash
+curl -i "http://127.0.0.1:5000/api/users/1" "${headers[@]}"
+```
+
 ## Alice requests Bob's profile
 
 ```powershell
@@ -357,6 +451,12 @@ Invoke-WebRequest `
   -Uri "http://127.0.0.1:5000/api/users/2" `
   -Method GET `
   -Headers $headers
+```
+
+### Ubuntu / Bash
+
+```bash
+curl -i "http://127.0.0.1:5000/api/users/2" "${headers[@]}"
 ```
 
 Repeat both tests on port `5001`.
@@ -397,10 +497,12 @@ $login = Invoke-RestMethod `
   -ContentType "application/json"
 
 $token = $login.token
-$headers = @{
-    Authorization = "Bearer $token"
-    "Content-Type" = "application/json"
-}
+```
+
+### Ubuntu / Bash
+
+```bash
+token=$(curl -s -X POST "http://127.0.0.1:5000/api/login" -H "Content-Type: application/json" -d '{"username":"alice","password":"alicepw"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
 ```
 
 Attempt to change sensitive properties:
@@ -418,6 +520,12 @@ Invoke-WebRequest `
   -Body $body
 ```
 
+### Ubuntu / Bash
+
+```bash
+curl -i -X PUT "http://127.0.0.1:5000/api/users/1" "${headers[@]}" -d '{"balance":999999,"is_admin":1}'
+```
+
 Repeat against port `5001`.
 
 ## Test B: Alice attempts to modify Bob's account
@@ -432,6 +540,12 @@ Invoke-WebRequest `
   -Method PUT `
   -Headers $headers `
   -Body $body
+```
+
+### Ubuntu / Bash
+
+```bash
+curl -i -X PUT "http://127.0.0.1:5000/api/users/2" "${headers[@]}" -d '{"email":"attacker-change@example.com"}'
 ```
 
 Repeat against port `5001`.
@@ -461,25 +575,42 @@ $login = Invoke-RestMethod `
   -ContentType "application/json"
 
 $token = $login.token
-$headers = @{ Authorization = "Bearer $token" }
+```
+
+### Ubuntu / Bash
+
+```bash
+token=$(curl -s -X POST "http://127.0.0.1:5000/api/login" -H "Content-Type: application/json" -d '{"username":"alice","password":"alicepw"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
 ```
 
 ## Request Alice's orders
 
 ```powershell
 Invoke-RestMethod `
-  -Uri "http://127.0.0.1:5000/api/users/1/orders" `
+  -Uri "http://127.0.0.1:5000/api/users/1" `
   -Method GET `
   -Headers $headers
+```
+
+### Ubuntu / Bash
+
+```bash
+curl -i "http://127.0.0.1:5000/api/users/1" "${headers[@]}"
 ```
 
 ## Request Bob's orders
 
 ```powershell
 Invoke-WebRequest `
-  -Uri "http://127.0.0.1:5000/api/users/2/orders" `
+  -Uri "http://127.0.0.1:5000/api/users/2" `
   -Method GET `
   -Headers $headers
+```
+
+### Ubuntu / Bash
+
+```bash
+curl -i "http://127.0.0.1:5000/api/users/2" "${headers[@]}"
 ```
 
 Repeat against port `5001`.
@@ -518,6 +649,12 @@ Invoke-RestMethod `
   -Headers $headers
 ```
 
+### Ubuntu / Bash
+
+```bash
+curl -i "http://127.0.0.1:5000/api/orders/1" "${headers[@]}"
+```
+
 ## Request Bob's order
 
 ```powershell
@@ -525,6 +662,12 @@ Invoke-WebRequest `
   -Uri "http://127.0.0.1:5000/api/orders/3" `
   -Method GET `
   -Headers $headers
+```
+
+### Ubuntu / Bash
+
+```bash
+curl -i "http://127.0.0.1:5000/api/orders/3" "${headers[@]}"
 ```
 
 Repeat against port `5001`.
@@ -564,6 +707,13 @@ Invoke-RestMethod `
   -Headers @{Authorization = "Bearer $token"}
 ```
 
+### Ubuntu / Bash
+
+```bash
+token=$(curl -s -X POST "http://127.0.0.1:5000/api/login" -H "Content-Type: application/json" -d '{"username":"alice","password":"alicepw"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+curl -i "http://127.0.0.1:5000/api/admin/users" -H "Authorization: Bearer $token"
+```
+
 ## Secure test: normal user calls admin endpoint
 
 ```powershell
@@ -578,10 +728,17 @@ $login = Invoke-RestMethod `
 
 $token = $login.token
 
-Invoke-WebRequest `
+Invoke-RestMethod `
   -Uri "http://127.0.0.1:5001/api/admin/users" `
   -Method GET `
   -Headers @{Authorization = "Bearer $token"}
+```
+
+### Ubuntu / Bash
+
+```bash
+token=$(curl -s -X POST "http://127.0.0.1:5001/api/login" -H "Content-Type: application/json" -d '{"username":"alice","password":"alicepw"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+curl -i "http://127.0.0.1:5001/api/admin/users" -H "Authorization: Bearer $token"
 ```
 
 ## Optional administrator verification
@@ -604,6 +761,13 @@ Invoke-RestMethod `
   -Uri "http://127.0.0.1:5001/api/admin/users" `
   -Method GET `
   -Headers @{Authorization = "Bearer $token"}
+```
+
+### Ubuntu / Bash
+
+```bash
+token=$(curl -s -X POST "http://127.0.0.1:5001/api/login" -H "Content-Type: application/json" -d '{"username":"admin","password":"adminpw"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+curl -i "http://127.0.0.1:5001/api/admin/users" -H "Authorization: Bearer $token"
 ```
 
 ## Expected comparison
@@ -640,6 +804,13 @@ Invoke-WebRequest `
   -Method GET
 ```
 
+### Ubuntu / Bash
+
+```bash
+payload="' OR '1'='1"
+curl -i -G "http://127.0.0.1:5000/api/products" --data-urlencode "search=$payload"
+```
+
 ### Secure application
 
 ```powershell
@@ -649,6 +820,13 @@ $encoded = [uri]::EscapeDataString($payload)
 Invoke-WebRequest `
   -Uri "http://127.0.0.1:5001/api/products?search=$encoded" `
   -Method GET
+```
+
+### Ubuntu / Bash
+
+```bash
+payload="' OR '1'='1"
+curl -i -G "http://127.0.0.1:5001/api/products" --data-urlencode "search=$payload"
 ```
 
 ## Expected comparison
@@ -677,6 +855,13 @@ $encoded = [uri]::EscapeDataString($payload)
 Invoke-WebRequest `
   -Uri "http://127.0.0.1:5000/api/products?search=$encoded" `
   -Method GET
+```
+
+### Ubuntu / Bash
+
+```bash
+payload="x%' UNION SELECT 1,'<img src=x onerror=alert(1)>','x' --"
+curl -i -G "http://127.0.0.1:5000/api/products" --data-urlencode "search=$payload"
 ```
 
 Repeat against port `5001`.
@@ -717,12 +902,24 @@ Invoke-RestMethod `
   -Method GET
 ```
 
+### Ubuntu / Bash
+
+```bash
+curl -i "http://127.0.0.1:5000/api/health"
+```
+
 Secure application:
 
 ```powershell
 Invoke-RestMethod `
   -Uri "http://127.0.0.1:5001/api/health" `
   -Method GET
+```
+
+### Ubuntu / Bash
+
+```bash
+curl -i "http://127.0.0.1:5001/api/health"
 ```
 
 ## Student implementation checkpoint
@@ -809,13 +1006,13 @@ The expected secure implementation behavior for this lab is:
 
 # Grading Criteria
 
-- 0 for Blank Sumission / Not able to run the vulnerable default application
-- 70 for successfull running of default vulnerable application
-- 75 for at least 1 corect To-Do implementations
-- 80 for at least 3 corect To-Do implementations
-- 85 for at least 5 To-Do implementations
-- 90 for at least 7 To-Do implementations
-- 95 for at least 9 corect To-Do implementations
-- 100 for at least 10 corect To-Do implementations
-- 110 for all 12 corect To-Do implementations
+- 0 for Blank Submission / Not able to run the vulnerable default application
+- 70 for successful running of default vulnerable application
+- 75 for at least 1 correct TODO implementations
+- 80 for at least 3 correct TODO implementations
+- 85 for at least 5 TODO implementations
+- 90 for at least 7 TODO implementations
+- 95 for at least 9 correct TODO implementations
+- 100 for at least 10 correct TODO implementations
+- 110 for all 12 correct TODO implementations
 

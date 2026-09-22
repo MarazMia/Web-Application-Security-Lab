@@ -6,7 +6,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 # ============================================================== APPLICATION
 app = Flask(__name__)
-DB = "vulnmart.db"
+
+# Dynamically set the database path relative to the location of app.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB = os.path.join(BASE_DIR, "vulnmart.db")
 
 # TODO (1) - JWT Secret Management
 # This is a weak, hardcoded, guessable secret - anyone reading this file
