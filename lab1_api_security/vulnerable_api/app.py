@@ -1,104 +1,67 @@
-import os
-import time
-import sqlite3
-import secrets
-import jwt
+import os, time, sqlite3, secrets, jwt
 from functools import wraps
-
 from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
-
 
 # ============================================================== APPLICATION
 app = Flask(__name__)
 DB = "vulnmart.db"
 
-
-# =============================================================== TODO (1)
-# Vulnerable default: hardcoded, weak JWT secret.
-# STUDENT TASK:
-#   Replace this with a secret loaded from an environment variable or other
-#   secure configuration. Do not break local execution when the variable is
-#   missing; choose an appropriate secure fallback for this teaching app.
+# TODO (1) - JWT Secret Management
+# This is a weak, hardcoded, guessable secret - anyone reading this file
+# could forge valid tokens with it.
 #
-# Example concepts to consider: os.environ, secrets.
-JWT_SECRET = "supersecret123"
+# >>> Replace the line below with:
+#         JWT_SECRET = os.environ.get("VULNMART_JWT_SECRET", secrets.token_hex(32))
+JWT_SECRET = "vulnmart-secret-123"
 JWT_ALGO = "HS256"
+JWT_EXPIRATION_SECONDS = 3 * 60  # token lifetime to use once TODO (3) is fixed
 
-
-# =============================================================== TODO (3)
-# Vulnerable default: tokens never expire.
-# STUDENT TASK:
-#   Define an appropriate token lifetime and add the required JWT claims in
-#   make_token(). Ensure expired tokens are rejected by get_current_user().
+# ====================================================================== CORS
+# TODO (2) - Restrictive CORS
+# "*" + credentials lets ANY website make authenticated requests on a
+# victim's behalf.
 #
-# Example:
-# JWT_EXPIRATION_SECONDS = ...
-
-
-# =============================================================== TODO (2)
-# Vulnerable default: any origin is allowed.
-# STUDENT TASK:
-#   Restrict API CORS to the known frontend origin(s). Think carefully about
-#   whether credentials are needed.
+# >>> Replace "origins": "*" below with an explicit allowlist, e.g.:
+#         "origins": ["http://127.0.0.1:5001", "http://localhost:5001"]
+#     and remove supports_credentials=True (it isn't needed with a Bearer token).
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
-
-# =============================================================== TODO (4)
-# Simple in-memory rate-limit scaffolding.
-# STUDENT TASK:
-#   Complete rate limiting for login. 
-#   The application must still run before this TODO is completed.
-#
-# Production systems should use a shared/distributed limiter rather than this
-# process-local dictionary.
+# ========================================================= RATE LIMITING
+# Simple in-memory limiter, intentionally basic for a teaching app.
+# The tracking logic below is already implemented for you - TODO (4) only
+# asks you to CALL it at the two spots marked further down (login, register).
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_ATTEMPTS = 5
-rate_limit_attempts = {}
-
+rate_limit_attempts = {}  # keyed by (bucket, ip) so buckets don't share/reset each other's counts
 
 def rate_limit_exceeded(bucket, ip):
-    """
-    TODO (4): Replace the vulnerable/default behavior with a real check.
-    Suggested design: keep only timestamps inside the active time window and
-    return True when the maximum allowed attempts has already been reached.
-
-    Current default intentionally disables the protection.
-    """
-    return False
-
+    now = time.time()
+    key = (bucket, ip)
+    attempts = [t for t in rate_limit_attempts.get(key, []) if now - t < RATE_LIMIT_WINDOW_SECONDS]
+    rate_limit_attempts[key] = attempts
+    return len(attempts) >= RATE_LIMIT_MAX_ATTEMPTS
 
 def record_rate_limited_attempt(bucket, ip):
-    """
-    TODO (4): Record one attempt for the supplied bucket/IP.
-
-    Current default intentionally does nothing, so the app remains vulnerable
-    until students implement the policy.
-    """
-    pass
-
+    now = time.time()
+    key = (bucket, ip)
+    attempts = [t for t in rate_limit_attempts.get(key, []) if now - t < RATE_LIMIT_WINDOW_SECONDS]
+    attempts.append(now)
+    rate_limit_attempts[key] = attempts
 
 # ================================================================= FRONTEND
 @app.route("/")
-def index():
-    return send_from_directory(".", "index.html")
-
+def index(): return send_from_directory(".", "index.html")
 
 @app.route("/profile.html")
-def profile_page():
-    return send_from_directory(".", "profile.html")
-
+def profile_page(): return send_from_directory(".", "profile.html")
 
 @app.route("/orders.html")
-def orders_page():
-    return send_from_directory(".", "orders.html")
-
+def orders_page(): return send_from_directory(".", "orders.html")
 
 @app.route("/products.html")
-def products_page():
-    return send_from_directory(".", "products.html")
-
+def products_page(): return send_from_directory(".", "products.html")
 
 # ================================================================== DATABASE
 def get_db():
@@ -107,38 +70,25 @@ def get_db():
         g.db.row_factory = sqlite3.Row
     return g.db
 
-
 @app.teardown_appcontext
 def close_db(exception=None):
     db = g.pop("db", None)
-    if db is not None:
-        db.close()
-
+    if db is not None: db.close()
 
 def init_db():
     conn = sqlite3.connect(DB)
     c = conn.cursor()
-
     c.executescript("""
         DROP TABLE IF EXISTS orders;
         DROP TABLE IF EXISTS users;
-
         CREATE TABLE users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            email TEXT NOT NULL,
-            ssn TEXT,
-            balance REAL DEFAULT 0,
-            is_admin INTEGER DEFAULT 0
+            id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL, email TEXT NOT NULL, ssn TEXT,
+            balance REAL DEFAULT 0, is_admin INTEGER DEFAULT 0
         );
-
         CREATE TABLE orders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            item TEXT NOT NULL,
-            amount REAL NOT NULL,
-            status TEXT DEFAULT 'placed',
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+            item TEXT NOT NULL, amount REAL NOT NULL, status TEXT DEFAULT 'placed',
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
     """)
@@ -148,320 +98,279 @@ def init_db():
         ("bob",   "bobpw",   "bob@example.com",   "222-33-4444", 40.00,  0),
         ("admin", "adminpw", "admin@vulnmart.local", "000-00-0000", 0.00, 1),
     ]
-
     for username, password, email, ssn, balance, is_admin in users:
         c.execute(
-            "INSERT INTO users "
-            "(username,password_hash,email,ssn,balance,is_admin) "
-            "VALUES (?,?,?,?,?,?)",
-            (
-                username,
-                generate_password_hash(password),
-                email,
-                ssn,
-                balance,
-                is_admin,
-            ),
+            "INSERT INTO users (username,password_hash,email,ssn,balance,is_admin) VALUES (?,?,?,?,?,?)",
+            (username, generate_password_hash(password), email, ssn, balance, is_admin)
         )
 
     orders = [
-        (1, "Wireless Mouse", 19.99),
-        (1, "Mechanical Keyboard", 89.00),
-        (2, "USB-C Cable", 9.50),
-        (3, "Server Rack (internal)", 1200.00),
+        (1, "Wireless Mouse", 19.99), (1, "Mechanical Keyboard", 89.00),
+        (2, "USB-C Cable", 9.50), (3, "Server Rack (internal)", 1200.00),
     ]
-
     for user_id, item, amount in orders:
-        c.execute(
-            "INSERT INTO orders (user_id,item,amount) VALUES (?,?,?)",
-            (user_id, item, amount),
-        )
+        c.execute("INSERT INTO orders (user_id,item,amount) VALUES (?,?,?)", (user_id, item, amount))
 
     conn.commit()
     conn.close()
 
-
 # ======================================================================= JWT
 def make_token(user_row):
-    """
-    TODO (3):
-    Add issued-at/expiration information to this payload and configure an
-    appropriate lifetime.
-
-    Vulnerable default intentionally contains no expiration.
-    """
+    now = int(time.time())
     payload = {
         "user_id": user_row["id"],
         "username": user_row["username"],
         "is_admin": bool(user_row["is_admin"]),
+        # TODO (3) - JWT Expiration
+        # This token never expires. Add two claims here so it does:
+        #     "iat": now,
+        #     "exp": now + JWT_EXPIRATION_SECONDS,
     }
-
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
-
 
 # ============================================================ AUTHENTICATION
 def get_current_user():
+    # Note: this already correctly rejects an expired token via
+    # jwt.ExpiredSignatureError - nothing to change here. It will start
+    # working the moment you add "exp" to the payload above (TODO 3).
     auth_header = request.headers.get("Authorization", "")
-
-    if not auth_header.startswith("Bearer "):
-        return None
-
+    if not auth_header.startswith("Bearer "): return None
     token = auth_header[len("Bearer "):]
-
     try:
-        # TODO (3):
-        # Ensure your completed implementation correctly rejects expired tokens.
         return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
-    except jwt.InvalidTokenError:
+    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
 
+def require_auth(function):
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        user = get_current_user()
+        if not user: return jsonify({"error": "unauthorized"}), 401
+        g.current_user = user
+        return function(*args, **kwargs)
+    return wrapper
 
-# =============================================================== TODO (6/8/9)
-# Optional authorization helper scaffolding.
-# STUDENT TASK:
-#   You may implement reusable decorators/helpers here for authentication,
-#   object-level authorization, and administrator checks.
-#
-# IMPORTANT: The default app intentionally does not enforce these controls.
-#
-# def require_auth(function):
-#     ...
-#
-# def require_admin(function):
-#     ...
-#
-# def require_same_user(user_id):
-#     ...
+def require_admin(function):
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        user = get_current_user()
+        if not user: return jsonify({"error": "unauthorized"}), 401
+        if not user.get("is_admin", False): return jsonify({"error": "forbidden"}), 403
+        g.current_user = user
+        return function(*args, **kwargs)
+    return wrapper
 
+def require_same_user(user_id):
+    # Already implemented for you - just call this where the comments below
+    # tell you to (TODOs 6, 7, 8).
+    authenticated_user_id = int(g.current_user["user_id"])
+    if authenticated_user_id != user_id:
+        return jsonify({"error": "forbidden"}), 403
+    return None
 
 # ===================================================================== LOGIN
 @app.route("/api/login", methods=["POST"])
 def login():
-    # TODO (4): Apply rate limiting before authentication.
-    # Vulnerable default: no throttling or lockout is enforced.
+    ip = request.remote_addr or "unknown"
+    # TODO (4) - Rate Limiting
+    # Call the two functions defined above (rate_limit_exceeded /
+    # record_rate_limited_attempt) with bucket="login" and this ip. See the
+    # secure /api/register version further down once you've done this once -
+    # both endpoints need the same three lines.
 
-    data = request.get_json(force=True) or {}
-    username = data.get("username")
-    password = data.get("password")
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid JSON body"}), 400
+
+    username, password = data.get("username"), data.get("password")
+    if not isinstance(username, str) or not isinstance(password, str) or not username or not password:
+        return jsonify({"error": "username and password are required"}), 400
 
     db = get_db()
+    row = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    if not row or not check_password_hash(row["password_hash"], password):
+        return jsonify({"error": "invalid credentials"}), 401
+
+    return jsonify({"token": make_token(row)})
+
+# ============================================================= USER PROFILE
+@app.route("/api/users/<int:user_id>", methods=["GET"])
+@require_auth
+def get_user(user_id):
+    # TODO (6) - Profile BOLA / Excessive Data Exposure
+    # Two things are wrong here:
+    #   (a) there's no ownership check, so any logged-in user can view any
+    #       other user's profile by changing the id in the URL.
+    #   (b) the query below returns EVERY column, including ssn/balance/
+    #       password_hash.
+    #
+    # >>> Add before the "db = get_db()" line:
+    #         authorization_error = require_same_user(user_id)
+    #         if authorization_error: return authorization_error
+    #
+    # >>> Then change the SELECT below to only: id, username, email
+    db = get_db()
+    row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row: return jsonify({"error": "not found"}), 404
+    return jsonify(dict(row))
+
+# ============================================================== USER ORDERS
+@app.route("/api/users/<int:user_id>/orders", methods=["GET"])
+@require_auth
+def user_orders(user_id):
+    # TODO (8) - Orders BOLA
+    # Any logged-in user can list any other user's orders by changing the id
+    # in the URL - there's no ownership check.
+    #
+    # >>> Add before "db = get_db()":
+    #         authorization_error = require_same_user(user_id)
+    #         if authorization_error: return authorization_error
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, user_id, item, amount, status FROM orders WHERE user_id = ?", (user_id,)
+    ).fetchall()
+    return jsonify([dict(row) for row in rows])
+
+# =============================================================== SINGLE ORDER
+@app.route("/api/orders/<int:order_id>", methods=["GET"])
+@require_auth
+def get_order(order_id):
+    current_user_id = int(g.current_user["user_id"])
+    db = get_db()
+    # TODO (9) - Single-Order Authorization
+    # This query fetches an order by id alone - it never checks that the
+    # order belongs to current_user_id, so any user can read any order.
+    #
+    # >>> Change the query to also filter by owner, e.g.:
+    #         "SELECT id, user_id, item, amount, status FROM orders WHERE id = ? AND user_id = ?"
+    #     and pass (order_id, current_user_id) as the parameters.
     row = db.execute(
-        "SELECT * FROM users WHERE username = ?",
-        (username,),
+        "SELECT id, user_id, item, amount, status FROM orders WHERE id = ?", (order_id,)
     ).fetchone()
+    if not row: return jsonify({"error": "not found"}), 404
+    return jsonify(dict(row))
 
-    if row and check_password_hash(row["password_hash"], password or ""):
-        return jsonify({"token": make_token(row)})
-
-    return jsonify({"error": "invalid credentials"}), 401
-
+# =================================================================== ADMIN
+# TODO (10) - Function-Level Authorization
+# @require_auth only checks that the caller is logged in, not that they're
+# an admin - so Alice can call this too.
+#
+# >>> Change the decorator on the line below from @require_auth to @require_admin
+@app.route("/api/admin/users", methods=["GET"])
+@require_auth
+def admin_list_users():
+    db = get_db()
+    rows = db.execute("SELECT id, username, email, is_admin FROM users").fetchall()
+    return jsonify([dict(row) for row in rows])
 
 # ================================================================= REGISTER
 @app.route("/api/register", methods=["POST"])
 def register():
-    # TODO (4): Optionally apply rate limiting here if required by the policy.
+    ip = request.remote_addr or "unknown"
+    # TODO (4) - Rate Limiting (same fix as /api/login above)
 
-    # TODO (5): Input validation.
-    # The secure reference implementation validates the request body and
-    # required fields before writing to the database.
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid JSON body"}), 400
+
+    username = data.get("username")
+    password = data.get("password")
+    email = data.get("email")
+
+    if not isinstance(username, str) or not isinstance(password, str) or not isinstance(email, str):
+        return jsonify({"error": "username, password, and email are required"}), 400
+    username, email = username.strip(), email.strip()
+    if not username: return jsonify({"error": "username cannot be empty"}), 400
+    if len(username) > 50: return jsonify({"error": "username too long"}), 400
+    if len(password) < 8: return jsonify({"error": "password must be at least 8 characters"}), 400
+    if len(email) > 254: return jsonify({"error": "email too long"}), 400
+
+    # TODO (5) - Registration Mass Assignment
+    # A client can currently register with balance=999999 and is_admin=1
+    # because those values are taken straight from the request body.
     #
-    # TODO (5): Mass assignment protection.
-    # Vulnerable default below accepts client-controlled sensitive fields.
-    # Students should whitelist the fields a registrant is allowed to provide
-    # and set protected properties server-side.
+    # >>> Replace the two lines below with fixed, server-side values:
+    #         balance = 0.0
+    #         is_admin = 0
+    balance = data.get("balance", 0.0)
+    is_admin = data.get("is_admin", 0)
 
-    data = request.get_json(force=True) or {}
     db = get_db()
-
     try:
-        # VULNERABLE DEFAULT:
-        # balance and is_admin are client-controlled.
         db.execute(
-            """INSERT INTO users
-               (username,password_hash,email,ssn,balance,is_admin)
-               VALUES (?,?,?,?,?,?)""",
-            (
-                data.get("username"),
-                generate_password_hash(data.get("password", "")),
-                data.get("email", ""),
-                data.get("ssn", ""),
-                data.get("balance", 0),
-                int(bool(data.get("is_admin", 0))),
-            ),
+            "INSERT INTO users (username,password_hash,email,ssn,balance,is_admin) VALUES (?,?,?,?,?,?)",
+            (username, generate_password_hash(password), email, None, balance, is_admin)
         )
         db.commit()
-
     except sqlite3.IntegrityError:
-        return jsonify({"error": "username taken"}), 409
+        return jsonify({"error": "username already exists"}), 409
 
     return jsonify({"message": "registered"}), 201
 
-
-# ============================================================= GET USER
-@app.route("/api/users/<int:user_id>", methods=["GET"])
-def get_user(user_id):
-    user = get_current_user()
-
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    # TODO (6): Object-level authorization / BOLA-IDOR protection.
-    # Vulnerable default: any authenticated user can request any user_id.
-    # Add an ownership (or appropriate administrator) authorization check.
-
-    db = get_db()
-    row = db.execute(
-        "SELECT * FROM users WHERE id = ?",
-        (user_id,),
-    ).fetchone()
-
-    if not row:
-        return jsonify({"error": "not found"}), 404
-
-    # TODO (6): Excessive data exposure.
-    # Vulnerable default returns the entire database row, including sensitive
-    # properties. Return only the fields required by the client.
-    return jsonify(dict(row))
-
-
 # =============================================================== UPDATE USER
 @app.route("/api/users/<int:user_id>", methods=["PUT"])
+@require_auth
 def update_user(user_id):
-    user = get_current_user()
+    # TODO (7) - Update Authorization / Property Control
+    # Two things are wrong here:
+    #   (a) there's no ownership check, so any user can edit any user_id.
+    #   (b) allowed_fields below lets the client overwrite balance/is_admin/ssn.
+    #
+    # >>> Add before "data = request.get_json(...)":
+    #         authorization_error = require_same_user(user_id)
+    #         if authorization_error: return authorization_error
+    #
+    # >>> Then change allowed_fields to only: ["email"]
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid JSON body"}), 400
 
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
+    allowed_fields = ["email", "balance", "is_admin", "ssn"]
+    unexpected_fields = set(data.keys()) - set(allowed_fields)
+    if unexpected_fields:
+        return jsonify({"error": "one or more fields are not editable"}), 400
 
-    data = request.get_json(force=True) or {}
-
-    # TODO (7): Ownership authorization.
-    # Vulnerable default allows an authenticated user to edit another user.
-
-    # TODO (7): Property-level authorization / mass assignment.
-    # Vulnerable default lets the client modify sensitive fields.
-    fields = []
-    values = []
-
-    for key in ("email", "ssn", "balance", "is_admin"):
+    db = get_db()
+    fields, values = [], []
+    for key in allowed_fields:
         if key in data:
             fields.append(f"{key} = ?")
             values.append(data[key])
-
     if not fields:
-        return jsonify({"error": "no fields to update"}), 400
+        return jsonify({"error": "no editable fields supplied"}), 400
 
     values.append(user_id)
-
-    db = get_db()
-
-    db.execute(
-        f"UPDATE users SET {', '.join(fields)} WHERE id = ?",
-        values,
-    )
+    db.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
     db.commit()
-
     return jsonify({"message": "updated"})
-
-
-# ============================================================== USER ORDERS
-@app.route("/api/users/<int:user_id>/orders", methods=["GET"])
-def user_orders(user_id):
-    user = get_current_user()
-
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    # TODO (8): Object-level authorization / BOLA protection.
-    # Vulnerable default: an authenticated user can request another user's
-    # orders by changing user_id.
-
-    db = get_db()
-    rows = db.execute(
-        "SELECT * FROM orders WHERE user_id = ?",
-        (user_id,),
-    ).fetchall()
-
-    return jsonify([dict(row) for row in rows])
-
-
-# =============================================================== SINGLE ORDER
-@app.route("/api/orders/<int:order_id>", methods=["GET"])
-def get_order(order_id):
-    user = get_current_user()
-
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    # TODO (9): Object-level authorization.
-    # Vulnerable default checks only that the caller is authenticated, not that
-    # the requested order belongs to that caller.
-
-    db = get_db()
-    row = db.execute(
-        "SELECT * FROM orders WHERE id = ?",
-        (order_id,),
-    ).fetchone()
-
-    if not row:
-        return jsonify({"error": "not found"}), 404
-
-    return jsonify(dict(row))
-
-
-# =================================================================== ADMIN
-@app.route("/api/admin/users", methods=["GET"])
-def admin_list_users():
-    user = get_current_user()
-
-    if not user:
-        return jsonify({"error": "unauthorized"}), 401
-
-    # TODO (10): Function-level authorization.
-    # Vulnerable default: any authenticated user can call this admin endpoint.
-    # Require an appropriate administrator authorization check.
-
-    db = get_db()
-    rows = db.execute("SELECT * FROM users").fetchall()
-
-    # TODO (10): Consider data minimization here too.
-    return jsonify([dict(row) for row in rows])
-
 
 # ====================================================================== SEARCH
 @app.route("/api/products", methods=["GET"])
+@require_auth
 def search_products():
-    search = request.args.get("search", "")
+    search = request.args.get("search", "").strip()
+    if len(search) > 50:
+        return jsonify({"error": "search query too long"}), 400
 
     db = get_db()
-
-    # TODO (11): SQL injection prevention.
-    # Vulnerable default intentionally concatenates untrusted input into SQL.
-    # Replace this with a parameterized query. Consider input validation as well.
-    query = (
-        "SELECT id, username, email "
-        f"FROM users WHERE username LIKE '%{search}%'"
-    )
-
-    try:
-        rows = db.execute(query).fetchall()
-    except sqlite3.OperationalError as e:
-        return jsonify({"error": str(e)}), 400
-
+    # TODO (11) - SQL Injection Prevention
+    # User input is concatenated straight into the SQL text below, so a
+    # crafted "search" value can change the query's meaning.
+    #
+    # >>> Replace the query line with a parameterized version:
+    #         rows = db.execute(
+    #             "SELECT id, username, email FROM users WHERE username LIKE ?", (f"%{search}%",)
+    #         ).fetchall()
+    query = f"SELECT id, username, email FROM users WHERE username LIKE '%{search}%'"
+    rows = db.execute(query).fetchall()
     return jsonify([dict(row) for row in rows])
-
 
 # ====================================================================== HEALTH
 @app.route("/api/health", methods=["GET"])
 def health():
-    # TODO (12): API versioning / inventory.
-    # The vulnerable API has no versioning. Implement the versioning approach
-    # required by the lab instructions and update the endpoint inventory/
-    # documentation accordingly.
-    return jsonify({
-        "status": "ok",
-        "note": "no versioning on this API - see debrief",
-    })
-
+    # TODO (12) Bonus - API Versioning
+    # >>> Add a "version": "v1" key to the response below.
+    return jsonify({"status": "ok"})
 
 # ================================================================= START APP
 if __name__ == "__main__":
@@ -469,7 +378,7 @@ if __name__ == "__main__":
 
     print(
         "\n" + "=" * 60
-        + "\nVULNMART - API SECURITY LAB (STUDENT TODO VERSION)\n"
+        + "\nVULNMART - API SECURITY LAB (VULNERABLE / STUDENT VERSION)\n"
         + "=" * 60
     )
 
@@ -499,7 +408,7 @@ if __name__ == "__main__":
     print("  TODO (2)  Restrictive CORS")
     print("  TODO (3)  JWT expiration")
     print("  TODO (4)  Rate limiting")
-    print("  TODO (5)  Registration validation / mass assignment")
+    print("  TODO (5)  Registration mass assignment")
     print("  TODO (6)  Profile BOLA / data exposure")
     print("  TODO (7)  Update authorization / property controls")
     print("  TODO (8)  Orders BOLA")

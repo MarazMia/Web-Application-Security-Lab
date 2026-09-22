@@ -10,7 +10,8 @@ This lab will use two locally running versions of the VulnMart application:
 | Secure application | `http://127.0.0.1:5001` | Verify that the corresponding security control rejects or prevents the insecure behavior. |
 
 
-The vulnerable code base is given to you and you can copy it for the secure application build up so that you can run both applications side by side but into a differnet port number `5001`. You just have to make the changes only inside the app.py file in the given `TO-DO` section. Your goal is to test the API checkpoints below and record the observed result for both versions.
+The vulnerable code base is given to you and you can copy it for the secure application build up so that you can run both applications side by side but into a differnet port number `5001`. You just have to make the changes only inside the app.py file in the given `TO-DO` section. Your goal is to test the API checkpoints below and record the observed result for both versions. Keep both code bases in the same folder level and use distinct SQLIte databse but with same name in both folder (it should be automatically 
+done for you if you don't manually change anything). If problem occures due to the same localhost server, try to run the to do implementation one at a time for secure and vulnerable codebase.
 
 ## Deliverables:
 
@@ -614,7 +615,7 @@ Invoke-RestMethod `
 
 ---
 
-# TODO (11) — SQL Injection and XSS Through the Products API/Page
+# TODO (11) Bonus — SQL Injection and XSS Through the Products API/Page
 
 ## Security objective
 
@@ -700,7 +701,7 @@ Repeat against port `5001`.
 
 ---
 
-# TODO (12) — API Versioning and Inventory
+# TODO (12) Bonus — API Versioning and Inventory
 
 ## Security objective
 
@@ -809,12 +810,12 @@ The expected secure implementation behavior for this lab is:
 # Grading Criteria
 
 - 0 for Blank Sumission / Not able to run the vulnerable default application
-- 60 for successfull running of default vulnerable application
-- 70 for at least 1 corect To-Do implementations
-- 75 for at least 3 corect To-Do implementations
-- 80 for at least 5 To-Do implementations
-- 85 for at least 7 To-Do implementations
-- 90 for at least 9 corect To-Do implementations
-- 95 for at least 11 corect To-Do implementations
-- 100 for all 12 corect To-Do implementations
+- 70 for successfull running of default vulnerable application
+- 75 for at least 1 corect To-Do implementations
+- 80 for at least 3 corect To-Do implementations
+- 85 for at least 5 To-Do implementations
+- 90 for at least 7 To-Do implementations
+- 95 for at least 9 corect To-Do implementations
+- 100 for at least 10 corect To-Do implementations
+- 110 for all 12 corect To-Do implementations
 

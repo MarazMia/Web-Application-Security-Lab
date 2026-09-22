@@ -1,6 +1,7 @@
 import requests
 import time
 
+# change the port to 5001 for secure implementation
 URL = "http://127.0.0.1:5000/api/login"
 
 TOTAL_REQUESTS = 1000
