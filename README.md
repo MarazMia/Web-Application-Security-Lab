@@ -55,3 +55,5 @@ python app.py
 ```
 
 Keep the backend app.py file running all the time else your website won't show on the browser. You can ctl+right click from the terminal to open the website inside VSCode or can use a normal broswer by copy and paste the given website URL. Once you create the virtual environment and the python libraries, you don't have to do it later. So, in future, just activate the virtual environment before running any python script.
+
+If in linux, for running the python3 command gives you error, try with plain python instead without the suffix "3".
