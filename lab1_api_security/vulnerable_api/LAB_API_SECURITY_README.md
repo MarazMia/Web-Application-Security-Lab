@@ -97,14 +97,12 @@ For the secure application, set a known lab secret before starting the applicati
 
 ```powershell
 $env:VULNMART_JWT_SECRET = "lab-demo-secret-change-this-in-production"
-python3 app.py
 ```
 
 ### Ubuntu / Bash
 
 ```bash
 export VULNMART_JWT_SECRET="lab-demo-secret-change-this-in-production"
-python3 app.py
 ```
 
 Then restart the application without setting the environment variable and verify that the application still runs.
