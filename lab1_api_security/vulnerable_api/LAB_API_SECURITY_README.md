@@ -12,7 +12,7 @@ This lab will use two locally running versions of the VulnMart application:
 
 The vulnerable code base is given to you first. **Complete and test the vulnerable application before building or testing the secure application.** Use the vulnerable application to observe and document the insecure behavior for each checkpoint. After you have completed the vulnerable-side tests, copy the vulnerable code base for the secure application, run it on a different port (`5001`), and implement the required security controls only inside the `app.py` file in the given `TO-DO` sections. Then repeat the same checkpoints against the secure application and compare the results. Keep both code bases at the same directory level and use distinct SQLite databases with the same name in both folders (this should happen automatically if you do not manually change anything). Running the applications side by side is optional; if both localhost servers cause a conflict, run and test them one at a time.
 
-<strong style="color: red;">Keep running the <h1>app.py</h1> all the time. This is your backend server code.</strong>
+<strong style="color: red;">Keep running the <code>app.py</code> all the time. This is your backend server code.</strong>
 
 
 ## Deliverables:
